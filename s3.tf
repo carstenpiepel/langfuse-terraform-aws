@@ -1,14 +1,15 @@
 locals {
   # Convert domain to bucket-friendly format (e.g., company.com -> company-com)
   bucket_prefix = replace(var.domain, ".", "-")
+  bucket_name   = coalesce(var.s3_bucket_name, "${local.bucket_prefix}-${var.name}")
 }
 
 resource "aws_s3_bucket" "langfuse" {
-  bucket = "${local.bucket_prefix}-${var.name}"
+  bucket = local.bucket_name
 
   # Add tags for better resource management
   tags = {
-    Name    = "${local.bucket_prefix}-${var.name}"
+    Name    = local.bucket_name
     Domain  = var.domain
     Service = "langfuse"
   }

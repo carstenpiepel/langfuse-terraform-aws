@@ -45,6 +45,49 @@ resource "aws_acm_certificate_validation" "cert" {
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
+# Certificates for hostnames that only redirect to var.domain. The load balancer
+# controller discovers these by matching the ingress hostnames.
+resource "aws_acm_certificate" "redirect" {
+  for_each = toset(var.redirect_domains)
+
+  domain_name       = each.value
+  validation_method = "DNS"
+
+  tags = {
+    Name = local.tag_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Validation records go in the parent zone, i.e. the domain minus its first label
+data "aws_route53_zone" "redirect" {
+  for_each = toset(var.redirect_domains)
+
+  name         = join(".", slice(split(".", each.value), 1, length(split(".", each.value))))
+  private_zone = false
+}
+
+resource "aws_route53_record" "redirect_cert_validation" {
+  for_each = toset(var.redirect_domains)
+
+  allow_overwrite = true
+  name            = one(aws_acm_certificate.redirect[each.value].domain_validation_options).resource_record_name
+  records         = [one(aws_acm_certificate.redirect[each.value].domain_validation_options).resource_record_value]
+  ttl             = 60
+  type            = one(aws_acm_certificate.redirect[each.value].domain_validation_options).resource_record_type
+  zone_id         = data.aws_route53_zone.redirect[each.value].zone_id
+}
+
+resource "aws_acm_certificate_validation" "redirect" {
+  for_each = toset(var.redirect_domains)
+
+  certificate_arn         = aws_acm_certificate.redirect[each.value].arn
+  validation_record_fqdns = [aws_route53_record.redirect_cert_validation[each.value].fqdn]
+}
+
 # Get the ALB details
 data "aws_lb" "ingress" {
   tags = {

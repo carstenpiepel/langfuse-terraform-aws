@@ -111,6 +111,18 @@ langfuse:
 %{endfor~}
 EOT
 
+  redirect_action = jsonencode({
+    type = "redirect"
+    redirectConfig = {
+      host       = var.domain
+      path       = "/#{path}"
+      query      = "#{query}"
+      port       = "443"
+      protocol   = "HTTPS"
+      statusCode = "HTTP_301"
+    }
+  })
+
   ingress_values    = <<EOT
 langfuse:
   ingress:
@@ -122,11 +134,25 @@ langfuse:
       alb.ingress.kubernetes.io/target-type: 'ip'
       alb.ingress.kubernetes.io/ssl-redirect: '443'
       alb.ingress.kubernetes.io/inbound-cidrs: ${local.inbound_cidrs_csv}
+%{if length(var.redirect_domains) > 0~}
+      alb.ingress.kubernetes.io/actions.redirect-to-primary: '${local.redirect_action}'
+%{endif~}
     hosts:
     - host: ${var.domain}
       paths:
       - path: /
         pathType: Prefix
+%{for redirect_domain in var.redirect_domains~}
+    - host: ${redirect_domain}
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: redirect-to-primary
+            port:
+              name: use-annotation
+%{endfor~}
 EOT
   encryption_values = var.use_encryption_key == false ? "" : <<EOT
 langfuse:

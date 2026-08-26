@@ -9,6 +9,18 @@ variable "domain" {
   type        = string
 }
 
+variable "s3_bucket_name" {
+  description = "Explicit name for the Langfuse S3 bucket. Defaults to a name derived from `domain` and `name`. Set this to pin an existing bucket when changing `domain`, since renaming the bucket destroys and recreates it."
+  type        = string
+  default     = null
+}
+
+variable "redirect_domains" {
+  description = "Additional hostnames that should 301-redirect to `domain`. Each requires an ACM certificate covering it in the same region for HTTPS to work; the load balancer controller discovers those automatically."
+  type        = list(string)
+  default     = []
+}
+
 variable "vpc_cidr" {
   description = "CIDR block for VPC"
   type        = string

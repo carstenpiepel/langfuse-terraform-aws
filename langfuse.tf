@@ -207,6 +207,15 @@ langfuse:
 %{endif~}
 EOT
 
+  # Setting certificate-arn at all turns off the controller's automatic
+  # discovery of certificates matching the ingress hostnames, so every host
+  # has to be listed explicitly. redirect_domains relied on that discovery
+  # before module 1.2.6 introduced the annotation.
+  ingress_certificate_arns = join(",", concat(
+    [local.certificate_arn],
+    [for d in var.redirect_domains : aws_acm_certificate.redirect[d].arn],
+  ))
+
   redirect_action = jsonencode({
     type = "redirect"
     redirectConfig = {
@@ -230,7 +239,7 @@ langfuse:
       alb.ingress.kubernetes.io/target-type: 'ip'
       alb.ingress.kubernetes.io/ssl-redirect: '443'
       alb.ingress.kubernetes.io/inbound-cidrs: ${local.inbound_cidrs_csv}
-      alb.ingress.kubernetes.io/certificate-arn: ${local.certificate_arn}
+      alb.ingress.kubernetes.io/certificate-arn: ${local.ingress_certificate_arns}
 %{if length(var.redirect_domains) > 0~}
       alb.ingress.kubernetes.io/actions.redirect-to-primary: '${local.redirect_action}'
 %{endif~}

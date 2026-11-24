@@ -104,6 +104,17 @@ variable "kubernetes_version" {
   default     = "1.36"
 }
 
+variable "cluster_authentication_mode" {
+  description = "Authentication mode for the EKS cluster. API_AND_CONFIG_MAP is what EKS itself defaults new clusters to, and several AWS services refuse to act on a cluster left on CONFIG_MAP: AWS Backup fails every job with \"the cluster's authentication mode must be set to one of [API, API_AND_CONFIG_MAP]\". API_AND_CONFIG_MAP keeps the aws-auth ConfigMap authoritative alongside access entries, so enabling it takes nothing away. EKS does not allow moving back down this list, only up."
+  type        = string
+  default     = "API_AND_CONFIG_MAP"
+
+  validation {
+    condition     = contains(["CONFIG_MAP", "API_AND_CONFIG_MAP", "API"], var.cluster_authentication_mode)
+    error_message = "cluster_authentication_mode must be one of CONFIG_MAP, API_AND_CONFIG_MAP or API."
+  }
+}
+
 variable "use_encryption_key" {
   description = "Whether to use an Encryption key for LLM API credential and integration credential store"
   type        = bool

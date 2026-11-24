@@ -14,6 +14,20 @@ resource "aws_eks_cluster" "langfuse" {
     security_group_ids      = [aws_security_group.eks.id]
   }
 
+  # Left unset, a cluster keeps whatever mode it was created with, and one
+  # created on CONFIG_MAP stays there silently. AWS Backup then fails every
+  # EKS job against it. See var.cluster_authentication_mode for why moving to
+  # API_AND_CONFIG_MAP costs nothing and cannot be undone.
+  access_config {
+    authentication_mode = var.cluster_authentication_mode
+
+    # Create-only and ForceNew. A cluster created before this block existed
+    # carries true in state, so declaring access_config without this line
+    # reads as true -> null and plans a full cluster replacement, which takes
+    # the OIDC provider and every IRSA role with it.
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   tags = {
@@ -98,9 +112,23 @@ resource "aws_eks_fargate_profile" "namespaces" {
 # itself, which is more durable than patching the annotation of an
 # EKS-managed object after the fact. The kube-system Fargate profile selects
 # on the namespace alone, so it already matches the CoreDNS pods.
+#
+# Without an explicit addon_version the add-on takes whatever build EKS
+# defaulted to when the cluster was created and never moves again, because
+# addon_version is Optional+Computed and Terraform reads back the live value.
+# That leaves CoreDNS rotting on an old eksbuild while the control plane and
+# the other add-ons advance. Resolving the newest build for the running
+# Kubernetes version keeps it current across applies instead.
+data "aws_eks_addon_version" "coredns" {
+  addon_name         = "coredns"
+  kubernetes_version = aws_eks_cluster.langfuse.version
+  most_recent        = true
+}
+
 resource "aws_eks_addon" "coredns" {
-  cluster_name = aws_eks_cluster.langfuse.name
-  addon_name   = "coredns"
+  cluster_name  = aws_eks_cluster.langfuse.name
+  addon_name    = "coredns"
+  addon_version = data.aws_eks_addon_version.coredns.version
 
   configuration_values = jsonencode({
     computeType = "Fargate"
